@@ -198,13 +198,19 @@ Jawab dengan ramah dan profesional dalam Bahasa Indonesia.
             
 Info penting:
 - Harga paket: Rp 1.500.000 (promo dari Rp 1.750.000)
-- Fitur: Odoo 19 lengkap (Accounting, Sales, Inventory, Manufacturing, POS), MATE Accounting, 15+ modul OCA, Hosting VPS Gratis Selamanya, Domain + SSL, Manual Bahasa Indonesia
+- Odoo 19: GRATIS SELAMANYA (Open Source, tidak ada biaya berlangganan bulanan)
+- Fitur: Odoo 19 lengkap (Accounting, Sales, Inventory, Manufacturing, POS), MATE Accounting, 15+ modul OCA
+- Hosting VPS: Biaya hosting ditanggung customer (bisa pilih provider sesuai budget)
+- Domain + SSL: Setup termasuk dalam paket
+- Manual Bahasa Indonesia: Dibuat otomatis oleh AI
 - Training opsional: Rp 500.000/hari
 - Kontak: WhatsApp +628****2778 (Dindin - Tim Marketing)
 - Demo gratis tersedia via laptop
 - Dikelola 100% oleh AI Agents
 
-Jika ada yang tanya harga, sebutkan Rp 1,5 Juta. Jika tanya demo, tawarkan demo gratis.`
+Jika ada yang tanya harga, sebutkan Rp 1,5 Juta. Jika tanya demo, tawarkan demo gratis.
+Jika ditanya soal hosting, jelaskan bahwa customer menanggung biaya VPS (bisa pilih Hostinger/DigitalOcean).
+Jika ditanya soal Odoo, jelaskan bahwa Odoo 19 tidak ada biaya langganan (Open Source).`
           },
           {
             role: 'user',
