@@ -8,8 +8,36 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data.json');
+const AGENTS_CONFIG = path.join(__dirname, 'agents-config.json');
+const TASKS_QUEUE = path.join(__dirname, 'agent_tasks.json');
 
-// Middleware
+// Load agents configuration
+let agentsConfig = {};
+try {
+  agentsConfig = JSON.parse(fs.readFileSync(AGENTS_CONFIG, 'utf8'));
+} catch (error) {
+  console.error('Error loading agents-config.json:', error.message);
+  agentsConfig = { agents: [], system_prompts: {} };
+}
+
+// Initialize tasks queue if not exists
+if (!fs.existsSync(TASKS_QUEUE)) {
+  fs.writeFileSync(TASKS_QUEUE, JSON.stringify([], null, 2));
+}
+
+// Helper to read tasks
+function readTasks() {
+  try {
+    return JSON.parse(fs.readFileSync(TASKS_QUEUE, 'utf8'));
+  } catch (error) {
+    return [];
+  }
+}
+
+// Helper to write tasks
+function writeTasks(tasks) {
+  fs.writeFileSync(TASKS_QUEUE, JSON.stringify(tasks, null, 2));
+}
 app.use(cors())
 app.use(bodyParser.json())
 
@@ -175,7 +203,7 @@ const AI_MODEL = 'tencent/hy3-preview:free';
 // Function to call OpenRouter API with timeout
 async function callOpenRouter(userMessage, customerName) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  const timeout = setTimeout(() => controller.abort(), 90000); // 90 second timeout for reasoning models
   
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -307,119 +335,97 @@ app.get('/api/chat', (req, res) => {
   res.json(chatMessages);
 });
 
-// Agent Task Processing with OpenRouter AI
+// Agent Task Processing - Write to Task Queue
 app.post('/api/agent-task', async (req, res) => {
-  const { agentId, agentRole, agentName, task } = req.body;
+  const { agentId, agentName, agentRole, task } = req.body;
   
   if (!task || !agentRole) {
     return res.status(400).json({ success: false, message: 'Missing task or agentRole' });
   }
 
-  // System prompts based on agent role
-  const rolePrompts = {
-    'Project Manager': `Anda adalah AI Agent Project Manager (PM) untuk NusaERP.
-Tugas Anda: Mengelola timeline project instalasi Odoo 19, koordinasi antar agen, monitor progress customer.
-Jawab dalam Bahasa Indonesia yang profesional dan terstruktur.
-Gunakan format: Status | Progress | Next Steps`,
-    
-    'Documentation': `Anda adalah AI Agent Documentation Specialist untuk NusaERP.
-Tugas Anda: Membuat user manual Bahasa Indonesia, dokumentasi teknis, README, dan panduan penggunaan Odoo 19.
-Jawab dalam Bahasa Indonesia yang mudah dipahami.
-Gunakan format yang rapi dengan heading, bullet points, dan penomoran.`,
-    
-    'Developer': `Anda adalah AI Agent Developer untuk NusaERP.
-Tugas Anda: Modifikasi kode Odoo 19, install modul OCA, setup MATE Accounting, troubleshooting teknis.
-Jawab dalam Bahasa Indonesia teknis tapi jelas.
-Sertakan kode/shell command jika diperlukan.`,
-    
-    'DevOps': `Anda adalah AI Agent DevOps untuk NusaERP.
-Tugas Anda: Deploy Odoo 19 ke VPS (DigitalOcean/Hostinger), setup Docker, konfigurasi domain, SSL, monitoring.
-Jawab dalam Bahasa Indonesia teknis.
-Sertakan perintah terminal/CLI jika diperlukan.`,
-    
-    'Marketing': `Anda adalah AI Agent Marketing untuk NusaERP.
-Tugas Anda: Buat konten sosmed, update website, SEO, analisis kompetitor, email marketing.
-Jawab dalam Bahasa Indonesia yang menarik dan persuasif.
-Gunakan emoji yang tepat dan call-to-action yang jelas.`,
-    
-    'Customer Service': `Anda adalah AI Agent Customer Service untuk NusaERP.
-Tugas Anda: Jawab pertanyaan customer, handle keluhan, berikan info paket Rp 1.5M, tawarkan demo gratis.
-Jawab dalam Bahasa Indonesia yang ramah dan solutif.
-Selalu sebutkan: "Hubungi +628****2778 (Dindin) jika butuh bantuan lebih lanjut."`
+  // Create task object
+  const newTask = {
+    id: Date.now(),
+    agentId,
+    agentName,
+    agentRole,
+    task,
+    status: 'PENDING',  // PENDING, PROCESSING, COMPLETED, FAILED
+    result: null,
+    createdAt: new Date().toISOString(),
+    completedAt: null
   };
 
-  const systemPrompt = rolePrompts[agentRole] || rolePrompts['Customer Service'];
+  // Write to tasks queue
+  const tasks = readTasks();
+  tasks.push(newTask);
+  writeTasks(tasks);
+
+  console.log(`Task queued - ${agentName} (${agentRole}): ${task}`);
   
-  try {
-    console.log(`Agent Task - ${agentName} (${agentRole}): ${task}`);
-    
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:5173',
-        'X-Title': 'NusaERP Mission Control'
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `ANDA HARUS MENJAWAB DALAM BAHASA INDONESIA. JANGAN GUNAKAN BAHASA LAIN.\n\n${systemPrompt}`
-          },
-          {
-            role: 'user',
-            content: task
-          }
-        ],
-        temperature: 0.7
-      })
-    });
+  // Log activity
+  const data_store = readData();
+  const activity = {
+    time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+    message: `Task queued: ${agentName} - ${task.substring(0, 50)}...`,
+    type: 'ai'
+  };
+  data_store.activities.unshift(activity);
+  if (data_store.activities.length > 50) data_store.activities.pop();
+  writeData(data_store);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenRouter API error:', response.status, errorText);
-      throw new Error(`API call failed: ${response.status}`);
-    }
+  // Return immediately - task will be processed by Abdul (PM Agent)
+  res.json({
+    success: true,
+    taskId: newTask.id,
+    message: 'Task queued for processing by Abdul (PM)',
+    status: 'PENDING'
+  });
+});
 
-    const data = await response.json();
-    console.log('Agent task response received');
-    
-    let aiResponse = '';
-    if (data.choices && data.choices[0] && data.choices[0].message) {
-      aiResponse = data.choices[0].message.content;
-    } else {
-      throw new Error('Invalid API response structure');
-    }
+// Get all tasks (for Abdul to process)
+app.get('/api/agent-tasks', (req, res) => {
+  const tasks = readTasks();
+  res.json(tasks);
+});
 
-    // Log activity
-    const data_store = readData();
-    const activity = {
-      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-      message: `AI Task: ${agentName} - ${task.substring(0, 50)}...`,
-      type: 'ai'
-    };
-    data_store.activities.unshift(activity);
-    if (data_store.activities.length > 50) data_store.activities.pop();
-    writeData(data_store);
+// Update task status/result (called by Abdul after processing)
+app.patch('/api/agent-tasks/:taskId', (req, res) => {
+  const taskId = parseInt(req.params.taskId);
+  const { status, result } = req.body;
+  
+  const tasks = readTasks();
+  const taskIndex = tasks.findIndex(t => t.id === taskId);
+  
+  if (taskIndex === -1) {
+    return res.status(404).json({ success: false, message: 'Task not found' });
+  }
+  
+  if (status) tasks[taskIndex].status = status;
+  if (result) tasks[taskIndex].result = result;
+  tasks[taskIndex].completedAt = new Date().toISOString();
+  
+  writeTasks(tasks);
+  
+  res.json({ success: true, task: tasks[taskIndex] });
+});
 
-    res.json({
-      success: true,
-      agentId,
-      agentName,
-      agentRole,
-      task,
-      response: aiResponse,
-      timestamp: new Date().toISOString()
-    });
+// Get completed tasks for Mission Control
+app.get('/api/agent-tasks/completed', (req, res) => {
+  const tasks = readTasks();
+  const completed = tasks.filter(t => t.status === 'COMPLETED');
+  res.json(completed);
+});
 
-  } catch (error) {
-    console.error('Agent task error:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Gagal memproses task dengan AI',
-      error: error.message
-    });
+// Get specific task by ID
+app.get('/api/agent-tasks/:taskId', (req, res) => {
+  const taskId = parseInt(req.params.taskId);
+  const tasks = readTasks();
+  const task = tasks.find(t => t.id === taskId);
+  
+  if (task) {
+    res.json(task);
+  } else {
+    res.status(404).json({ success: false, message: 'Task not found' });
   }
 });

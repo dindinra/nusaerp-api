@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1777270462803,
+    "agentId": 3,
+    "agentName": "Cak Lontong",
+    "agentRole": "Developer",
+    "task": "Mulai instalasi aplikasi Odoo 19 untuk demo customer. Setup Odoo 19 dengan Docker, install modul MATE Accounting dan Plus Modul Premium. Pastikan siap untuk demo gratis. Buat laporan instalasi lengkap.",
+    "status": "FAILED",
+    "result": "Sub-agent timed out after 600 seconds (10 minutes). Made 19 API calls but did not complete. Possible causes: (1) Docker not running, (2) Network issues, (3) Task too complex for single run. Suggestion: Break task into smaller steps, check Docker status first.",
+    "createdAt": "2026-04-27T06:14:22.803Z",
+    "completedAt": "2026-04-27T06:24:22.803Z"
+  }
+]
